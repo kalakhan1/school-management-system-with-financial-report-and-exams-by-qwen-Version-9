@@ -6,8 +6,9 @@ const dataManagerController = require('../controllers/dataManager.controller');
 
 router.use(protect);
 
-router.get('/models', dataManagerController.getAvailableModels);
-router.get('/:model', dataManagerController.getData);
+// ✅ Fixed: All data manager operations are Admin only
+router.get('/models', isAdmin, dataManagerController.getAvailableModels);
+router.get('/:model', isAdmin, dataManagerController.getData);
 router.put('/:model/:id', isAdmin, dataManagerController.updateData);
 router.delete('/:model/:id', isAdmin, dataManagerController.deleteData);
 

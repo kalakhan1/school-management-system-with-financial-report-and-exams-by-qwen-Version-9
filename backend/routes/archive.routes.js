@@ -6,9 +6,10 @@ const archiveController = require('../controllers/archive.controller');
 
 router.use(protect);
 
-router.get('/', archiveController.getArchive);
-router.post('/trash', archiveController.moveToTrash);
-router.post('/restore/:id', archiveController.restoreFromArchive);
+// ✅ Fixed: All archive operations are Admin only
+router.get('/', isAdmin, archiveController.getArchive);
+router.post('/trash', isAdmin, archiveController.moveToTrash);
+router.post('/restore/:id', isAdmin, archiveController.restoreFromArchive);
 router.delete('/:id', isAdmin, archiveController.deleteFromArchive);
 
 module.exports = router;
