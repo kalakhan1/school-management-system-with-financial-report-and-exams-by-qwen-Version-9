@@ -18,15 +18,22 @@ async function loadExams() {
         <td>${e.endDate ? new Date(e.endDate).toLocaleDateString() : 'N/A'}</td>
         <td><span class="badge bg-${e.status === 'Active' ? 'success' : 'secondary'}">${e.status}</span></td>
         <td>
-          <button class="btn btn-sm btn-outline-success me-1" onclick="showRegisteredStudentsModal('${e.examType}', '${e.examYear}')" title="View Students"><i class="bi bi-people-fill"></i></button>
-          <button class="btn btn-sm btn-outline-primary me-1" onclick="showExamRegistrationModal('${e.examType}', '${e.examYear}')" title="Register"><i class="bi bi-person-plus"></i></button>
+          <button class="btn btn-sm btn-outline-success me-1" onclick="showRegisteredStudentsModal('${e.examType}', '${e.examYear}')" title="View Students">
+            <i class="bi bi-people-fill"></i> Students
+          </button>
+          <button class="btn btn-sm btn-outline-primary me-1" onclick="showExamRegistrationModal('${e.examType}', '${e.examYear}')" title="Register">
+            <i class="bi bi-person-plus"></i> Register
+          </button>
           <button class="btn btn-sm btn-outline-danger" onclick="deleteExam('${e._id}')"><i class="bi bi-trash"></i></button>
         </td>
       </tr>
     `).join('');
 
     main.innerHTML = `
-      <button class="btn btn-primary mb-3" onclick="showAddExamModal()"><i class="bi bi-plus-circle"></i> Add Exam</button>
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <button class="btn btn-primary" onclick="showAddExamModal()"><i class="bi bi-plus-circle"></i> Add Exam</button>
+        <button class="btn btn-success" onclick="loadResults()"><i class="bi bi-file-earmark-ruled"></i> View Results</button>
+      </div>
       <div class="card shadow-sm"><div class="table-responsive">
         <table class="table table-hover mb-0">
           <thead class="table-light"><tr><th>Type</th><th>Year</th><th>Start</th><th>End</th><th>Status</th><th>Actions</th></tr></thead>
@@ -225,7 +232,7 @@ async function saveExamRegistration() {
 }
 
 // ==========================================
-// VIEW REGISTERED STUDENTS (Search, Update, Delete)
+// VIEW REGISTERED STUDENTS
 // ==========================================
 async function showRegisteredStudentsModal(examType, examYear) {
   const html = `
@@ -294,7 +301,7 @@ async function deleteRegistration(id) {
 }
 
 // ==========================================
-// RESULTS MANAGEMENT & CREATION FORM
+// RESULTS MANAGEMENT (WITH CREATE FORM)
 // ==========================================
 async function loadResults() {
   const main = document.getElementById('mainContent');
@@ -319,7 +326,10 @@ async function loadResults() {
     `).join('');
 
     main.innerHTML = `
-      <button class="btn btn-primary mb-3" onclick="showCreateResultModal()"><i class="bi bi-plus-circle"></i> Create Result Card</button>
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <button class="btn btn-primary" onclick="showCreateResultModal()"><i class="bi bi-plus-circle"></i> Create Result Card</button>
+        <button class="btn btn-outline-secondary" onclick="loadExams()"><i class="bi bi-arrow-left"></i> Back to Exams</button>
+      </div>
       <div class="card shadow-sm"><div class="table-responsive">
         <table class="table table-hover mb-0">
           <thead class="table-light"><tr><th>Student</th><th>Exam</th><th>Percentage</th><th>Grade</th><th>Actions</th></tr></thead>
@@ -562,41 +572,201 @@ async function printResultCard(id) {
 }
 
 // ==========================================
-// TEST RESULTS MANAGEMENT
+// ✅ TEST RESULTS MANAGEMENT (WITH FILTERS)
 // ==========================================
+
+// Global filter state
+let testResultsFilters = {
+  search: '',
+  className: '',
+  testType: ''
+};
+
 async function loadTestResults() {
   const main = document.getElementById('mainContent');
   document.getElementById('pageTitle').innerText = 'Test Results';
   main.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div></div>';
 
   try {
-    const res = await api.get('/test-results?limit=50');
+    // ✅ NEW: Fetch classes for filter dropdown
+    let classes = [];
+    try {
+      const classesRes = await api.get('/classes');
+      classes = classesRes.data || [];
+    } catch (err) { /* ignore */ }
+
+    const classOptions = classes.map(c => 
+      `<option value="${c.className}" ${testResultsFilters.className === c.className ? 'selected' : ''}>${c.className}</option>`
+    ).join('');
+
+    // ✅ NEW: Filter UI at top
+    main.innerHTML = `
+      <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white">
+          <h5 class="mb-0"><i class="bi bi-funnel"></i> Filter Test Results</h5>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label fw-bold"><i class="bi bi-search"></i> Search Student</label>
+              <input type="text" id="trSearchInput" class="form-control" 
+                     placeholder="Type student name..." 
+                     value="${testResultsFilters.search}" 
+                     oninput="debounceTestResultSearch(this.value)">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-bold"><i class="bi bi-building"></i> Class</label>
+              <select id="trClassFilter" class="form-select" onchange="applyTestResultClassFilter(this.value)">
+                <option value="">All Classes</option>
+                ${classOptions}
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-bold"><i class="bi bi-clipboard"></i> Test Type</label>
+              <select id="trTypeFilter" class="form-select" onchange="applyTestResultTypeFilter(this.value)">
+                <option value="">All Types</option>
+                <option value="Weekly" ${testResultsFilters.testType === 'Weekly' ? 'selected' : ''}>Weekly</option>
+                <option value="Monthly" ${testResultsFilters.testType === 'Monthly' ? 'selected' : ''}>Monthly</option>
+                <option value="Quarterly" ${testResultsFilters.testType === 'Quarterly' ? 'selected' : ''}>Quarterly</option>
+                <option value="Half-Yearly" ${testResultsFilters.testType === 'Half-Yearly' ? 'selected' : ''}>Half-Yearly</option>
+                <option value="Pre-Board" ${testResultsFilters.testType === 'Pre-Board' ? 'selected' : ''}>Pre-Board</option>
+              </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+              <button class="btn btn-outline-secondary w-100" onclick="clearTestResultFilters()">
+                <i class="bi bi-x-circle"></i> Clear
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <button class="btn btn-primary" onclick="showAddTestResultModal()"><i class="bi bi-plus-circle"></i> Add Test Result</button>
+        <div id="trResultCount" class="text-muted"></div>
+      </div>
+
+      <div id="trResultsContainer">
+        <div class="text-center p-5"><div class="spinner-border text-primary"></div></div>
+      </div>
+    `;
+
+    // Load test results with current filters
+    loadTestResultsData();
+  } catch (err) {
+    main.innerHTML = `<div class="alert alert-danger">${err.message}</div>`;
+  }
+}
+
+// ✅ NEW: Load test results data with filters
+async function loadTestResultsData() {
+  const container = document.getElementById('trResultsContainer');
+  if (!container) return;
+  
+  container.innerHTML = '<div class="text-center p-3"><div class="spinner-border spinner-border-sm text-primary"></div> Loading...</div>';
+
+  try {
+    // Build query string with filters
+    let queryParams = 'limit=100';
+    if (testResultsFilters.search) queryParams += `&search=${encodeURIComponent(testResultsFilters.search)}`;
+    if (testResultsFilters.className) queryParams += `&className=${encodeURIComponent(testResultsFilters.className)}`;
+    if (testResultsFilters.testType) queryParams += `&testType=${encodeURIComponent(testResultsFilters.testType)}`;
+
+    const res = await api.get(`/test-results?${queryParams}`);
     const tests = res.data || [];
+    const pagination = res.pagination || { total: 0 };
+
+    // Update result count
+    const countEl = document.getElementById('trResultCount');
+    if (countEl) {
+      countEl.innerHTML = `<span class="badge bg-info fs-6"><i class="bi bi-list-check"></i> ${pagination.total} result(s) found</span>`;
+    }
 
     let rows = tests.map(t => `
       <tr>
         <td>${new Date(t.testDate).toLocaleDateString()}</td>
-        <td><strong>${t.student?.fullName || 'Unknown'}</strong><br><small class="text-muted">${t.student?.class || ''}</small></td>
+        <td>
+          <strong>${t.student?.fullName || 'Unknown'}</strong>
+          <br><small class="text-muted">${t.student?.class || ''} • ${t.student?.grNo || 'N/A'}</small>
+        </td>
         <td><span class="badge bg-info">${t.testType}</span></td>
         <td>${t.subject}</td>
         <td><strong>${t.marks}/${t.totalMarks}</strong></td>
-        <td><strong>${t.percentage}%</strong></td>
+        <td>
+          <div class="progress" style="height: 20px; min-width: 80px;">
+            <div class="progress-bar bg-${t.percentage >= 75 ? 'success' : t.percentage >= 50 ? 'warning' : 'danger'}" 
+                 style="width: ${t.percentage}%">
+              ${t.percentage.toFixed(1)}%
+            </div>
+          </div>
+        </td>
         <td>
           <button class="btn btn-sm btn-outline-danger" onclick="deleteTestResult('${t._id}')"><i class="bi bi-trash"></i></button>
         </td>
       </tr>
     `).join('');
 
-    main.innerHTML = `
-      <button class="btn btn-primary mb-3" onclick="showAddTestResultModal()"><i class="bi bi-plus-circle"></i> Add Test Result</button>
-      <div class="card shadow-sm"><div class="table-responsive">
-        <table class="table table-hover mb-0">
-          <thead class="table-light"><tr><th>Date</th><th>Student</th><th>Type</th><th>Subject</th><th>Marks</th><th>%</th><th>Actions</th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="7" class="text-center text-muted">No test results found</td></tr>'}</tbody>
-        </table>
-      </div></div>
+    container.innerHTML = `
+      <div class="card shadow-sm">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Date</th>
+                <th>Student</th>
+                <th>Type</th>
+                <th>Subject</th>
+                <th>Marks</th>
+                <th>Percentage</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>${rows || '<tr><td colspan="7" class="text-center text-muted py-4"><i class="bi bi-inbox"></i> No test results found</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>
     `;
-  } catch (err) { main.innerHTML = `<div class="alert alert-danger">${err.message}</div>`; }
+  } catch (err) {
+    container.innerHTML = `<div class="alert alert-danger">Failed to load: ${err.message}</div>`;
+  }
+}
+
+// ✅ NEW: Debounced search
+let testResultSearchTimer;
+function debounceTestResultSearch(value) {
+  clearTimeout(testResultSearchTimer);
+  testResultSearchTimer = setTimeout(() => {
+    testResultsFilters.search = value;
+    loadTestResultsData();
+  }, 400);
+}
+
+// ✅ NEW: Class filter
+function applyTestResultClassFilter(className) {
+  testResultsFilters.className = className;
+  loadTestResultsData();
+}
+
+// ✅ NEW: Test type filter
+function applyTestResultTypeFilter(testType) {
+  testResultsFilters.testType = testType;
+  loadTestResultsData();
+}
+
+// ✅ NEW: Clear all filters
+function clearTestResultFilters() {
+  testResultsFilters = { search: '', className: '', testType: '' };
+  
+  const searchInput = document.getElementById('trSearchInput');
+  const classFilter = document.getElementById('trClassFilter');
+  const typeFilter = document.getElementById('trTypeFilter');
+  
+  if (searchInput) searchInput.value = '';
+  if (classFilter) classFilter.value = '';
+  if (typeFilter) typeFilter.value = '';
+  
+  loadTestResultsData();
+  showToast('Filters cleared', 'info');
 }
 
 function showAddTestResultModal() {
@@ -650,14 +820,17 @@ async function saveTestResult() {
     await api.post('/test-results', data);
     showToast('Test result added!', 'success');
     closeModal('testResultModal');
-    loadTestResults();
+    loadTestResultsData(); // ✅ Refresh with current filters
   } catch (err) { showToast(err.message, 'danger'); }
 }
 
 async function deleteTestResult(id) {
   if (!confirm('Delete this test result?')) return;
-  try { await api.delete(`/test-results/${id}`); showToast('Deleted', 'success'); loadTestResults(); } 
-  catch (err) { showToast(err.message, 'danger'); }
+  try { 
+    await api.delete(`/test-results/${id}`); 
+    showToast('Deleted', 'success'); 
+    loadTestResultsData(); // ✅ Refresh with current filters
+  } catch (err) { showToast(err.message, 'danger'); }
 }
 
 function closeModal(id) {
@@ -692,6 +865,11 @@ window.saveResultCard = saveResultCard;
 window.deleteResultCard = deleteResultCard;
 window.printResultCard = printResultCard;
 window.loadTestResults = loadTestResults;
+window.loadTestResultsData = loadTestResultsData;
+window.debounceTestResultSearch = debounceTestResultSearch;
+window.applyTestResultClassFilter = applyTestResultClassFilter;
+window.applyTestResultTypeFilter = applyTestResultTypeFilter;
+window.clearTestResultFilters = clearTestResultFilters;
 window.showAddTestResultModal = showAddTestResultModal;
 window.saveTestResult = saveTestResult;
 window.deleteTestResult = deleteTestResult;

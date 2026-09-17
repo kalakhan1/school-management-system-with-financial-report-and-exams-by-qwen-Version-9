@@ -1,15 +1,35 @@
 const Class = require('../models/Class');
 const Student = require('../models/Student');
 
+// @desc    Get All Classes with Student Count
+// @route   GET /api/classes
 exports.getClasses = async (req, res) => {
   try {
-    const classes = await Class.find().sort({ className: 1 });
-    res.status(200).json({ success: true, data: classes });
+    const classes = await Class.find().sort({ className: 1 }).lean();
+    
+    // ✅ NEW: Calculate student count for each class
+    const classesWithCount = await Promise.all(classes.map(async (cls) => {
+      const studentCount = await Student.countDocuments({ 
+        class: cls.className, 
+        status: 'Active' 
+      });
+      
+      return {
+        ...cls,
+        studentCount,
+        totalStudents: studentCount // Alias for clarity
+      };
+    }));
+
+    res.status(200).json({ success: true, data: classesWithCount });
   } catch (error) {
+    console.error('Get Classes Error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch classes' });
   }
 };
 
+// @desc    Create Class
+// @route   POST /api/classes
 exports.createClass = async (req, res) => {
   try {
     const { className, section } = req.body;
@@ -23,6 +43,8 @@ exports.createClass = async (req, res) => {
   }
 };
 
+// @desc    Delete Class
+// @route   DELETE /api/classes/:id
 exports.deleteClass = async (req, res) => {
   try {
     // Check if students are enrolled

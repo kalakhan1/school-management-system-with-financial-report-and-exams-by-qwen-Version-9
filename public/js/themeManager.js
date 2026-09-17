@@ -11,8 +11,14 @@ const ThemeManager = {
 
   // Initialize theme on page load
   init() {
+    // ✅ FIX: Check if body exists before accessing
+    if (!document.body) {
+      console.warn('ThemeManager: document.body not ready yet');
+      return false;
+    }
+
     const savedTheme = localStorage.getItem(this.STORAGE_KEY);
-    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const systemPrefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
     
     // Priority: Saved preference > System preference > Light (default)
     const theme = savedTheme || (systemPrefersDark ? this.THEMES.DARK : this.THEMES.LIGHT);
@@ -20,17 +26,27 @@ const ThemeManager = {
     this.applyTheme(theme);
     
     // Listen for system theme changes
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
-      // Only auto-switch if user hasn't set a preference
-      if (!localStorage.getItem(this.STORAGE_KEY)) {
-        this.applyTheme(e.matches ? this.THEMES.DARK : this.THEMES.LIGHT);
-        this.updateToggleButton();
-      }
-    });
+    if (window.matchMedia) {
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+        // Only auto-switch if user hasn't set a preference
+        if (!localStorage.getItem(this.STORAGE_KEY)) {
+          this.applyTheme(e.matches ? this.THEMES.DARK : this.THEMES.LIGHT);
+          this.updateToggleButton();
+        }
+      });
+    }
+    
+    return true;
   },
 
   // Apply theme to body
   applyTheme(theme) {
+    // ✅ FIX: Safety check for body
+    if (!document.body) {
+      console.warn('ThemeManager: Cannot apply theme, body not ready');
+      return;
+    }
+
     if (theme === this.THEMES.DARK) {
       document.body.classList.add('dark-mode');
     } else {
@@ -54,7 +70,7 @@ const ThemeManager = {
 
   // Get current theme
   getCurrentTheme() {
-    return document.body.classList.contains('dark-mode') ? this.THEMES.DARK : this.THEMES.LIGHT;
+    return document.body && document.body.classList.contains('dark-mode') ? this.THEMES.DARK : this.THEMES.LIGHT;
   },
 
   // Update toggle button icon
@@ -76,8 +92,19 @@ const ThemeManager = {
   }
 };
 
-// Initialize theme immediately (before DOM fully loads to prevent flash)
-ThemeManager.init();
+// ✅ FIX: Safely initialize - wait for DOM if needed
+function initThemeManager() {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      ThemeManager.init();
+    });
+  } else {
+    ThemeManager.init();
+  }
+}
+
+// Initialize immediately
+initThemeManager();
 
 // Global function for toggle button
 function toggleTheme() {

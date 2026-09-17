@@ -1,5 +1,5 @@
 // ==========================================
-// CLASS RESULTS REPORT (Print All Students)
+// CLASS RESULTS REPORT (With Top 10 Toppers & Multi-Page Print)
 // ==========================================
 
 async function loadClassResultReport() {
@@ -8,7 +8,6 @@ async function loadClassResultReport() {
   main.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div></div>';
 
   try {
-    // Fetch classes that have results
     const classesRes = await api.get('/class-results/classes-with-results');
     const classes = classesRes.data || [];
 
@@ -129,6 +128,49 @@ async function generateClassReport() {
       `;
     }).join('');
 
+    // ✅ NEW: Top 10 Toppers Section
+    const topToppers = data.topToppers || [];
+    let toppersHtml = '';
+    if (topToppers.length > 0) {
+      const topperRows = topToppers.map(t => `
+        <tr>
+          <td class="text-center">
+            <span class="badge bg-${t.rank === 1 ? 'warning' : t.rank === 2 ? 'secondary' : t.rank === 3 ? 'danger' : 'primary'} fs-6">
+              #${t.rank}
+            </span>
+          </td>
+          <td><strong>${t.student.fullName}</strong></td>
+          <td class="text-center">${t.student.rollNo || 'N/A'}</td>
+          <td class="text-center"><strong class="text-success fs-5">${t.percentage}%</strong></td>
+          <td class="text-center"><span class="badge bg-success fs-6">${t.grade}</span></td>
+          <td class="text-center">${t.totalMarks}/${t.totalMax}</td>
+        </tr>
+      `).join('');
+
+      toppersHtml = `
+        <div class="card shadow-sm mb-4 border-warning">
+          <div class="card-header bg-warning text-dark">
+            <h5 class="mb-0"><i class="bi bi-trophy-fill"></i> Top 10 Toppers</h5>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-hover mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th class="text-center" style="width: 80px;">Rank</th>
+                  <th>Student Name</th>
+                  <th class="text-center">Roll No</th>
+                  <th class="text-center">Percentage</th>
+                  <th class="text-center">Grade</th>
+                  <th class="text-center">Marks</th>
+                </tr>
+              </thead>
+              <tbody>${topperRows}</tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
     // Summary cards
     const summary = data.summary;
     const summaryHtml = `
@@ -180,7 +222,10 @@ async function generateClassReport() {
         </h5>
         <div>
           <button class="btn btn-success me-2" onclick="printClassReport()">
-            <i class="bi bi-printer"></i> Print Report
+            <i class="bi bi-printer"></i> Print Full Report
+          </button>
+          <button class="btn btn-warning" onclick="printTopToppersOnly()">
+            <i class="bi bi-trophy"></i> Print Top 10 Only
           </button>
         </div>
       </div>
@@ -209,7 +254,7 @@ async function generateClassReport() {
       </div>
     `;
 
-    container.innerHTML = summaryHtml + actionsHtml + tableHtml;
+    container.innerHTML = summaryHtml + toppersHtml + actionsHtml + tableHtml;
 
     // Store data for printing
     window.currentClassReportData = data;
@@ -221,7 +266,7 @@ async function generateClassReport() {
 }
 
 // ==========================================
-// PRINT FUNCTION - Professional Marksheet
+// ✅ PRINT FUNCTION - Multi-Page with Top 10
 // ==========================================
 function printClassReport() {
   const data = window.currentClassReportData;
@@ -239,38 +284,177 @@ function printClassReport() {
   // Build subject headers for print
   const subjectHeaders = subjects.map(s => `<th>${s}</th>`).join('');
 
-  // Build student rows for print
-  const studentRows = data.students.map((s, index) => {
-    const subjectCells = subjects.map(sub => {
-      const mark = s.subjectMarks[sub];
-      if (!mark) return '<td class="center">-</td>';
-      return `<td class="center">${mark.obtained}</td>`;
+  // ✅ NEW: Split students into chunks for multi-page handling (25 per page)
+  const studentsPerPage = 25;
+  const totalStudents = data.students.length;
+  const totalPages = Math.ceil(totalStudents / studentsPerPage);
+  
+  let pagesHtml = '';
+  
+  for (let page = 0; page < totalPages; page++) {
+    const startIdx = page * studentsPerPage;
+    const endIdx = Math.min(startIdx + studentsPerPage, totalStudents);
+    const pageStudents = data.students.slice(startIdx, endIdx);
+    
+    const studentRows = pageStudents.map((s, idx) => {
+      const actualIndex = startIdx + idx;
+      const subjectCells = subjects.map(sub => {
+        const mark = s.subjectMarks[sub];
+        if (!mark) return '<td class="center">-</td>';
+        return `<td class="center">${mark.obtained}</td>`;
+      }).join('');
+
+      return `
+        <tr>
+          <td class="center">${actualIndex + 1}</td>
+          <td>${s.student.rollNo || '-'}</td>
+          <td>${s.student.fullName}</td>
+          ${subjectCells}
+          <td class="center"><strong>${s.totalMarks}</strong></td>
+          <td class="center"><strong>${s.totalMax}</strong></td>
+          <td class="center"><strong>${s.percentage}%</strong></td>
+          <td class="center"><strong>${s.grade}</strong></td>
+          <td class="center"><strong>${s.status}</strong></td>
+        </tr>
+      `;
     }).join('');
 
-    return `
-      <tr>
-        <td class="center">${index + 1}</td>
-        <td>${s.student.rollNo || '-'}</td>
-        <td>${s.student.fullName}</td>
-        ${subjectCells}
-        <td class="center"><strong>${s.totalMarks}</strong></td>
-        <td class="center"><strong>${s.totalMax}</strong></td>
-        <td class="center"><strong>${s.percentage}%</strong></td>
-        <td class="center"><strong>${s.grade}</strong></td>
-        <td class="center"><strong>${s.status}</strong></td>
-      </tr>
-    `;
-  }).join('');
+    const summary = data.summary;
+    const school = data.school;
+    const examInfo = data.examInfo;
 
-  const summary = data.summary;
-  const school = data.school;
-  const examInfo = data.examInfo;
+    // ✅ NEW: Top 10 Toppers on first page only
+    let toppersSection = '';
+    if (page === 0 && data.topToppers && data.topToppers.length > 0) {
+      const topperRows = data.topToppers.map(t => `
+        <tr>
+          <td class="center">
+            <strong style="color: ${t.rank === 1 ? '#d4af37' : t.rank === 2 ? '#757575' : t.rank === 3 ? '#cd7f32' : '#000'};">
+              #${t.rank}
+            </strong>
+          </td>
+          <td><strong>${t.student.fullName}</strong></td>
+          <td class="center">${t.student.rollNo || '-'}</td>
+          <td class="center"><strong>${t.percentage}%</strong></td>
+          <td class="center"><strong>${t.grade}</strong></td>
+          <td class="center">${t.totalMarks}/${t.totalMax}</td>
+        </tr>
+      `).join('');
+
+      toppersSection = `
+        <div class="toppers-section">
+          <div class="toppers-title">🏆 TOP 10 TOPPERS</div>
+          <table class="toppers-table">
+            <thead>
+              <tr>
+                <th style="width: 50px;">Rank</th>
+                <th>Student Name</th>
+                <th style="width: 70px;">Roll No</th>
+                <th style="width: 70px;">%</th>
+                <th style="width: 60px;">Grade</th>
+                <th style="width: 80px;">Marks</th>
+              </tr>
+            </thead>
+            <tbody>${topperRows}</tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    // ✅ NEW: Summary section on last page only
+    let summarySection = '';
+    if (page === totalPages - 1) {
+      summarySection = `
+        <div class="summary-section">
+          <div class="summary-title">Statistical Summary</div>
+          <div class="summary-grid">
+            <div class="summary-item"><span>Total Students:</span><strong>${summary.totalStudents}</strong></div>
+            <div class="summary-item"><span>Appeared:</span><strong>${summary.appeared}</strong></div>
+            <div class="summary-item"><span>Absent/No Result:</span><strong>${summary.noResult}</strong></div>
+            <div class="summary-item"><span>Passed:</span><strong>${summary.passed}</strong></div>
+            <div class="summary-item"><span>Failed:</span><strong>${summary.failed}</strong></div>
+            <div class="summary-item"><span>Pass Percentage:</span><strong>${summary.passPercentage}%</strong></div>
+            <div class="summary-item"><span>Class Average:</span><strong>${summary.classAverage}%</strong></div>
+            <div class="summary-item"><span>Highest %:</span><strong>${summary.highestPercentage}%</strong></div>
+            <div class="summary-item"><span>Lowest %:</span><strong>${summary.lowestPercentage}%</strong></div>
+          </div>
+        </div>
+
+        <div class="signatures">
+          <div class="signature-box">
+            <div class="signature-line">Class Teacher</div>
+          </div>
+          <div class="signature-box">
+            <div class="signature-line">Exam Coordinator</div>
+          </div>
+          <div class="signature-box">
+            <div class="signature-line">Principal</div>
+          </div>
+        </div>
+      `;
+    }
+
+    // ✅ NEW: Page number indicator
+    const pageInfo = totalPages > 1 
+      ? `<div class="page-info">Page ${page + 1} of ${totalPages}</div>` 
+      : '';
+
+    pagesHtml += `
+      <div class="print-page ${page > 0 ? 'page-break' : ''}">
+        ${page === 0 ? `
+          <div class="header">
+            <div class="school-name">${school.name}</div>
+            ${school.address ? `<div class="school-info">${school.address}</div>` : ''}
+            ${school.phone ? `<div class="school-info">Phone: ${school.phone}</div>` : ''}
+            <div class="report-title">Class Result Sheet</div>
+          </div>
+
+          <div class="exam-info">
+            <div><strong>Class:</strong> ${examInfo.className}</div>
+            <div><strong>Exam:</strong> ${examInfo.examType}</div>
+            <div><strong>Year:</strong> ${examInfo.examYear}</div>
+            <div><strong>Academic Year:</strong> ${school.academicYear}</div>
+            <div><strong>Generated:</strong> ${new Date().toLocaleDateString()}</div>
+          </div>
+
+          ${toppersSection}
+        ` : `
+          <div class="continued-header">
+            <div class="school-name-small">${school.name} - Class Result Sheet (Continued)</div>
+            <div class="exam-info-small">${examInfo.examType} ${examInfo.examYear} - ${examInfo.className}</div>
+          </div>
+        `}
+
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th style="width: 30px;">S.No</th>
+              <th style="width: 60px;">Roll No</th>
+              <th>Student Name</th>
+              ${subjectHeaders}
+              <th style="width: 50px;">Obt</th>
+              <th style="width: 50px;">Total</th>
+              <th style="width: 50px;">%</th>
+              <th style="width: 50px;">Grade</th>
+              <th style="width: 60px;">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${studentRows}
+          </tbody>
+        </table>
+
+        ${summarySection}
+        ${pageInfo}
+      </div>
+    `;
+  }
 
   const html = `
     <!DOCTYPE html>
     <html>
     <head>
-      <title>Class Result - ${examInfo.className} - ${examInfo.examType} ${examInfo.examYear}</title>
+      <title>Class Result - ${data.examInfo.className} - ${data.examInfo.examType} ${data.examInfo.examYear}</title>
       <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -279,6 +463,15 @@ function printClassReport() {
           color: #000;
           background: #fff;
         }
+        
+        .print-page {
+          margin-bottom: 20px;
+        }
+        
+        .page-break {
+          page-break-before: always;
+        }
+        
         .header { 
           text-align: center; 
           border-bottom: 3px double #000; 
@@ -291,6 +484,21 @@ function printClassReport() {
           text-transform: uppercase;
           letter-spacing: 2px;
           margin-bottom: 5px;
+        }
+        .school-name-small {
+          font-size: 18px;
+          font-weight: bold;
+          text-transform: uppercase;
+          text-align: center;
+          margin-bottom: 5px;
+        }
+        .exam-info-small {
+          text-align: center;
+          font-size: 12px;
+          margin-bottom: 10px;
+          padding: 5px;
+          background: #f5f5f5;
+          border: 1px solid #000;
         }
         .school-info { 
           font-size: 12px; 
@@ -317,18 +525,57 @@ function printClassReport() {
           text-transform: uppercase; 
         }
         
-        table { 
+        /* Top 10 Toppers Section */
+        .toppers-section {
+          margin: 20px 0;
+          border: 2px solid #d4af37;
+          padding: 15px;
+          background: #fffdf0;
+          page-break-inside: avoid;
+        }
+        .toppers-title {
+          font-size: 18px;
+          font-weight: bold;
+          text-align: center;
+          margin-bottom: 10px;
+          color: #b8860b;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+        }
+        .toppers-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 12px;
+        }
+        .toppers-table th {
+          background: #d4af37;
+          color: #fff;
+          padding: 6px;
+          text-align: center;
+          border: 1px solid #b8860b;
+        }
+        .toppers-table td {
+          border: 1px solid #d4af37;
+          padding: 5px;
+        }
+        .toppers-table tbody tr:nth-child(1) { background: #fff9e6; }
+        .toppers-table tbody tr:nth-child(2) { background: #f5f5f5; }
+        .toppers-table tbody tr:nth-child(3) { background: #faebd7; }
+        
+        /* Results Table */
+        .results-table { 
           width: 100%; 
           border-collapse: collapse; 
           margin: 15px 0;
           font-size: 12px;
         }
-        th, td { 
+        .results-table th, 
+        .results-table td { 
           border: 1px solid #000; 
           padding: 6px 4px; 
           text-align: left;
         }
-        th { 
+        .results-table th { 
           background: #2c3e50; 
           color: #fff; 
           text-align: center; 
@@ -337,12 +584,14 @@ function printClassReport() {
           font-size: 11px;
         }
         .center { text-align: center; }
-        tbody tr:nth-child(even) { background: #f9f9f9; }
+        .results-table tbody tr:nth-child(even) { background: #f9f9f9; }
         
+        /* Summary Section */
         .summary-section {
           margin: 20px 0;
           border: 2px solid #000;
           padding: 15px;
+          page-break-inside: avoid;
         }
         .summary-title {
           font-size: 16px;
@@ -374,6 +623,7 @@ function printClassReport() {
           margin-top: 60px;
           display: flex;
           justify-content: space-between;
+          page-break-inside: avoid;
         }
         .signature-box {
           text-align: center;
@@ -384,6 +634,14 @@ function printClassReport() {
           margin-top: 40px;
           padding-top: 5px;
           font-size: 12px;
+        }
+
+        .page-info {
+          text-align: center;
+          font-size: 11px;
+          margin-top: 15px;
+          color: #666;
+          font-style: italic;
         }
 
         .footer {
@@ -415,11 +673,12 @@ function printClassReport() {
           body { padding: 10px; }
           .no-print { display: none !important; }
           .header { page-break-before: avoid; }
-          table { page-break-inside: auto; }
-          tr { page-break-inside: avoid; page-break-after: auto; }
-          thead { display: table-header-group; }
+          .results-table { page-break-inside: auto; }
+          .results-table tr { page-break-inside: avoid; page-break-after: auto; }
+          .results-table thead { display: table-header-group; }
           .summary-section { page-break-inside: avoid; }
           .signatures { page-break-inside: avoid; }
+          .toppers-section { page-break-inside: avoid; }
         }
 
         @page {
@@ -429,93 +688,16 @@ function printClassReport() {
       </style>
     </head>
     <body>
-      <!-- Header -->
-      <div class="header">
-        <div class="school-name">${school.name}</div>
-        ${school.address ? `<div class="school-info">${school.address}</div>` : ''}
-        ${school.phone ? `<div class="school-info">Phone: ${school.phone}</div>` : ''}
-        <div class="report-title">Class Result Sheet</div>
-      </div>
+      ${pagesHtml}
 
-      <!-- Exam Info -->
-      <div class="exam-info">
-        <div><strong>Class:</strong> ${examInfo.className}</div>
-        <div><strong>Exam:</strong> ${examInfo.examType}</div>
-        <div><strong>Year:</strong> ${examInfo.examYear}</div>
-        <div><strong>Academic Year:</strong> ${school.academicYear}</div>
-        <div><strong>Generated:</strong> ${new Date().toLocaleDateString()}</div>
-      </div>
-
-      <!-- Results Table -->
-      <table>
-        <thead>
-          <tr>
-            <th style="width: 30px;">S.No</th>
-            <th style="width: 60px;">Roll No</th>
-            <th>Student Name</th>
-            ${subjectHeaders}
-            <th style="width: 50px;">Obt</th>
-            <th style="width: 50px;">Total</th>
-            <th style="width: 50px;">%</th>
-            <th style="width: 50px;">Grade</th>
-            <th style="width: 60px;">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${studentRows}
-        </tbody>
-      </table>
-
-      <!-- Summary Section -->
-      <div class="summary-section">
-        <div class="summary-title">Statistical Summary</div>
-        <div class="summary-grid">
-          <div class="summary-item"><span>Total Students:</span><strong>${summary.totalStudents}</strong></div>
-          <div class="summary-item"><span>Appeared:</span><strong>${summary.appeared}</strong></div>
-          <div class="summary-item"><span>Absent/No Result:</span><strong>${summary.noResult}</strong></div>
-          <div class="summary-item"><span>Passed:</span><strong>${summary.passed}</strong></div>
-          <div class="summary-item"><span>Failed:</span><strong>${summary.failed}</strong></div>
-          <div class="summary-item"><span>Pass Percentage:</span><strong>${summary.passPercentage}%</strong></div>
-          <div class="summary-item"><span>Class Average:</span><strong>${summary.classAverage}%</strong></div>
-          <div class="summary-item"><span>Highest %:</span><strong>${data.students.length > 0 ? Math.max(...data.students.filter(s => s.status !== 'Result Not Generated').map(s => s.percentage)).toFixed(2) + '%' : 'N/A'}</strong></div>
-          <div class="summary-item"><span>Lowest %:</span><strong>${data.students.length > 0 ? Math.min(...data.students.filter(s => s.status !== 'Result Not Generated' && s.percentage > 0).map(s => s.percentage)).toFixed(2) + '%' : 'N/A'}</strong></div>
-        </div>
-      </div>
-
-      <!-- Signatures -->
-      <div class="signatures">
-        <div class="signature-box">
-          <div class="signature-line">Class Teacher</div>
-        </div>
-        <div class="signature-box">
-          <div class="signature-line">Exam Coordinator</div>
-        </div>
-        <div class="signature-box">
-          <div class="signature-line">Principal</div>
-        </div>
-      </div>
-
-      <!-- Footer -->
       <div class="footer">
-        This is a computer-generated result sheet. | Generated on ${new Date().toLocaleString()} | ${school.name}
+        This is a computer-generated result sheet. | Generated on ${new Date().toLocaleString()} | ${data.school.name}
       </div>
 
-      <!-- Print Buttons -->
       <div class="no-print">
         <button onclick="window.print()">🖨️ Print Result Sheet</button>
         <button onclick="window.close()">✖ Close</button>
       </div>
-
-      <script>
-        // Auto-focus for printing
-        window.onload = function() {
-          setTimeout(() => {
-            if (confirm('Do you want to print this result sheet now?')) {
-              window.print();
-            }
-          }, 500);
-        };
-      </script>
     </body>
     </html>
   `;
@@ -525,7 +707,162 @@ function printClassReport() {
   showToast('Report ready for printing!', 'success');
 }
 
+// ==========================================
+// ✅ NEW: Print Top 10 Toppers Only
+// ==========================================
+function printTopToppersOnly() {
+  const data = window.currentClassReportData;
+  if (!data || !data.topToppers || data.topToppers.length === 0) {
+    return showToast('No toppers data available', 'warning');
+  }
+
+  const printWindow = window.open('', '_blank', 'width=800,height=600');
+  if (!printWindow) return showToast('Popup blocked!', 'warning');
+
+  const school = data.school;
+  const examInfo = data.examInfo;
+  const summary = data.summary;
+
+  const topperRows = data.topToppers.map(t => `
+    <tr>
+      <td class="center">
+        <strong style="font-size: 16px; color: ${t.rank === 1 ? '#d4af37' : t.rank === 2 ? '#757575' : t.rank === 3 ? '#cd7f32' : '#000'};">
+          ${t.rank === 1 ? '🥇' : t.rank === 2 ? '🥈' : t.rank === 3 ? '🥉' : '#' + t.rank}
+        </strong>
+      </td>
+      <td><strong style="font-size: 14px;">${t.student.fullName}</strong></td>
+      <td class="center">${t.student.rollNo || '-'}</td>
+      <td class="center"><strong style="font-size: 16px; color: #28a745;">${t.percentage}%</strong></td>
+      <td class="center"><strong>${t.grade}</strong></td>
+      <td class="center">${t.totalMarks}/${t.totalMax}</td>
+    </tr>
+  `).join('');
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Top 10 Toppers - ${examInfo.className}</title>
+      <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Times New Roman', serif; padding: 30px; }
+        .header { text-align: center; border-bottom: 3px double #d4af37; padding-bottom: 15px; margin-bottom: 25px; }
+        .school-name { font-size: 26px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; }
+        .school-info { font-size: 12px; color: #555; margin: 3px 0; }
+        .title { font-size: 22px; font-weight: bold; margin-top: 15px; color: #b8860b; text-transform: uppercase; letter-spacing: 1px; }
+        .subtitle { font-size: 14px; color: #666; margin-top: 5px; }
+        
+        .toppers-table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 13px; }
+        .toppers-table th { background: #d4af37; color: #fff; padding: 10px; text-align: center; border: 1px solid #b8860b; text-transform: uppercase; }
+        .toppers-table td { border: 1px solid #d4af37; padding: 10px; }
+        .center { text-align: center; }
+        .toppers-table tbody tr:nth-child(1) { background: #fff9e6; }
+        .toppers-table tbody tr:nth-child(2) { background: #f5f5f5; }
+        .toppers-table tbody tr:nth-child(3) { background: #faebd7; }
+        
+        .stats-box { 
+          margin: 25px 0; 
+          padding: 15px; 
+          border: 2px solid #d4af37; 
+          background: #fffdf0;
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 15px;
+          text-align: center;
+        }
+        .stat-item { padding: 10px; border: 1px solid #d4af37; background: #fff; }
+        .stat-label { font-size: 12px; color: #666; text-transform: uppercase; }
+        .stat-value { font-size: 20px; font-weight: bold; color: #b8860b; margin-top: 5px; }
+        
+        .signatures { margin-top: 60px; display: flex; justify-content: space-around; }
+        .signature-box { text-align: center; width: 200px; }
+        .signature-line { border-top: 1px solid #000; margin-top: 40px; padding-top: 5px; font-size: 12px; }
+        
+        .no-print { text-align: center; margin: 20px 0; }
+        .no-print button { padding: 10px 25px; margin: 0 5px; cursor: pointer; border: 1px solid #000; background: #fff; }
+        
+        @media print {
+          .no-print { display: none !important; }
+          body { padding: 15px; }
+        }
+        @page { size: A4 portrait; margin: 1.5cm; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <div class="school-name">${school.name}</div>
+        ${school.address ? `<div class="school-info">${school.address}</div>` : ''}
+        ${school.phone ? `<div class="school-info">Phone: ${school.phone}</div>` : ''}
+        <div class="title">🏆 Merit Certificate</div>
+        <div class="subtitle">Top 10 Toppers - ${examInfo.examType} ${examInfo.examYear}</div>
+        <div class="subtitle">Class: ${examInfo.className}</div>
+      </div>
+
+      <table class="toppers-table">
+        <thead>
+          <tr>
+            <th style="width: 70px;">Rank</th>
+            <th>Student Name</th>
+            <th style="width: 80px;">Roll No</th>
+            <th style="width: 90px;">Percentage</th>
+            <th style="width: 70px;">Grade</th>
+            <th style="width: 90px;">Marks</th>
+          </tr>
+        </thead>
+        <tbody>${topperRows}</tbody>
+      </table>
+
+      <div class="stats-box">
+        <div class="stat-item">
+          <div class="stat-label">Total Students</div>
+          <div class="stat-value">${summary.totalStudents}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Class Average</div>
+          <div class="stat-value">${summary.classAverage}%</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Pass Percentage</div>
+          <div class="stat-value">${summary.passPercentage}%</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Highest Score</div>
+          <div class="stat-value">${summary.highestPercentage}%</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Students Passed</div>
+          <div class="stat-value">${summary.passed}</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">Academic Year</div>
+          <div class="stat-value" style="font-size: 14px;">${school.academicYear}</div>
+        </div>
+      </div>
+
+      <div class="signatures">
+        <div class="signature-box">
+          <div class="signature-line">Class Teacher</div>
+        </div>
+        <div class="signature-box">
+          <div class="signature-line">Principal</div>
+        </div>
+      </div>
+
+      <div class="no-print">
+        <button onclick="window.print()">🖨️ Print</button>
+        <button onclick="window.close()">✖ Close</button>
+      </div>
+    </body>
+    </html>
+  `;
+
+  printWindow.document.write(html);
+  printWindow.document.close();
+  showToast('Top 10 Toppers report ready!', 'success');
+}
+
 // Global Exports
 window.loadClassResultReport = loadClassResultReport;
 window.generateClassReport = generateClassReport;
 window.printClassReport = printClassReport;
+window.printTopToppersOnly = printTopToppersOnly;

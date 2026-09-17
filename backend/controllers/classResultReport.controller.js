@@ -1,4 +1,5 @@
 const ResultCard = require('../models/ResultCard');
+const ExamRegistration = require('../models/ExamRegistration');
 const Student = require('../models/Student');
 const Setting = require('../models/Setting');
 
@@ -24,17 +25,31 @@ exports.getClassReport = async (req, res) => {
     if (students.length === 0) {
       return res.status(200).json({ 
         success: true, 
-        data: { students: [], subjects: [], summary: {} },
+        data: { students: [], subjects: [], summary: {}, topToppers: [] },
         message: 'No students found in this class'
       });
     }
 
-    // 2. Get all result cards for these students in this exam
     const studentIds = students.map(s => s._id);
-    const results = await ResultCard.find({
+
+    // ✅ FIX: Pehle matching registrations dhoondo (populate ke pehle filter nahi hota)
+    const registrations = await ExamRegistration.find({
       student: { $in: studentIds },
-      'registration.examType': examType,
-      'registration.examYear': parseInt(examYear)
+      examType: examType,
+      examYear: parseInt(examYear)
+    }).select('_id student rollNumber');
+
+    const registrationIds = registrations.map(r => r._id);
+    
+    // Map student ID to registration for quick lookup
+    const registrationMap = {};
+    registrations.forEach(r => {
+      registrationMap[r.student.toString()] = r;
+    });
+
+    // ✅ FIX: Ab result cards fetch karo matching registrations ke liye
+    const results = await ResultCard.find({
+      registration: { $in: registrationIds }
     }).populate('student', 'fullName grNo rollNo section')
       .populate('registration', 'examType examYear rollNumber');
 
@@ -48,6 +63,7 @@ exports.getClassReport = async (req, res) => {
     // 4. Build student-wise result data
     const studentsData = students.map(student => {
       const result = results.find(r => r.student._id.toString() === student._id.toString());
+      const registration = registrationMap[student._id.toString()];
       
       if (!result) {
         return {
@@ -55,7 +71,7 @@ exports.getClassReport = async (req, res) => {
             _id: student._id,
             fullName: student.fullName,
             grNo: student.grNo,
-            rollNo: student.rollNo,
+            rollNo: student.rollNo || (registration?.rollNumber) || 'N/A',
             section: student.section
           },
           subjectMarks: {},
@@ -100,8 +116,21 @@ exports.getClassReport = async (req, res) => {
       };
     });
 
-    // 5. Calculate summary statistics
-    const studentsWithResults = studentsData.filter(s => s.status !== 'Result Not Generated');
+    // 5. ✅ NEW: Calculate Top 10 Toppers
+    const studentsWithResults = studentsData
+      .filter(s => s.status !== 'Result Not Generated' && s.percentage > 0)
+      .sort((a, b) => b.percentage - a.percentage);
+    
+    const topToppers = studentsWithResults.slice(0, 10).map((s, index) => ({
+      rank: index + 1,
+      student: s.student,
+      percentage: s.percentage,
+      grade: s.grade,
+      totalMarks: s.totalMarks,
+      totalMax: s.totalMax
+    }));
+
+    // 6. Calculate summary statistics
     const passCount = studentsWithResults.filter(s => s.status === 'PASS').length;
     const failCount = studentsWithResults.filter(s => s.status === 'FAIL').length;
     const noResultCount = studentsData.filter(s => s.status === 'Result Not Generated').length;
@@ -110,7 +139,12 @@ exports.getClassReport = async (req, res) => {
       ? studentsWithResults.reduce((sum, s) => sum + s.percentage, 0) / studentsWithResults.length
       : 0;
 
-    // 6. Get school settings for print
+    const highestPercentage = studentsWithResults.length > 0 ? studentsWithResults[0].percentage : 0;
+    const lowestPercentage = studentsWithResults.length > 0 
+      ? studentsWithResults[studentsWithResults.length - 1].percentage 
+      : 0;
+
+    // 7. Get school settings for print
     const settings = await Setting.findOne().lean() || {};
 
     res.status(200).json({
@@ -118,6 +152,7 @@ exports.getClassReport = async (req, res) => {
       data: {
         students: studentsData,
         subjects,
+        topToppers, // ✅ NEW
         summary: {
           totalStudents: students.length,
           appeared: studentsWithResults.length,
@@ -127,7 +162,9 @@ exports.getClassReport = async (req, res) => {
           classAverage: parseFloat(avgPercentage.toFixed(2)),
           passPercentage: studentsWithResults.length > 0 
             ? parseFloat(((passCount / studentsWithResults.length) * 100).toFixed(2))
-            : 0
+            : 0,
+          highestPercentage: parseFloat(highestPercentage.toFixed(2)),
+          lowestPercentage: parseFloat(lowestPercentage.toFixed(2))
         },
         school: {
           name: settings.schoolName || 'School Name',
@@ -144,7 +181,7 @@ exports.getClassReport = async (req, res) => {
     });
   } catch (error) {
     console.error('Class Report Error:', error);
-    res.status(500).json({ success: false, error: 'Failed to generate class report' });
+    res.status(500).json({ success: false, error: 'Failed to generate class report: ' + error.message });
   }
 };
 

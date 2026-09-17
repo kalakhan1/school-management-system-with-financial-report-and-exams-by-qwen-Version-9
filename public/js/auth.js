@@ -42,10 +42,7 @@ function showLogin() {
   document.getElementById('appLayout').style.display = 'none';
   document.getElementById('appLayout').classList.remove('d-flex');
   
-  // ✅ Update theme toggle button for login screen
-  if (typeof ThemeManager !== 'undefined') {
-    ThemeManager.updateToggleButton();
-  }
+  if (typeof ThemeManager !== 'undefined') ThemeManager.updateToggleButton();
 }
 
 function showApp() {
@@ -55,14 +52,12 @@ function showApp() {
   renderSidebar();
   loadDashboard();
   
-  // ✅ Update theme toggle button for app
-  if (typeof ThemeManager !== 'undefined') {
-    ThemeManager.updateToggleButton();
-  }
+  if (typeof ThemeManager !== 'undefined') ThemeManager.updateToggleButton();
 }
 
 function renderSidebar() {
   const sidebar = document.getElementById('sidebar');
+  
   let menu = `
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h4 class="mb-0">School ERP</h4>
@@ -89,7 +84,8 @@ function renderSidebar() {
     <a href="#" class="nav-link text-white" onclick="loadSalaries()"><i class="bi bi-wallet2"></i> Salaries</a>
     
     <hr class="text-white-50 my-2"><small class="text-white-50 px-2">EXAMINATION</small>
-    <a href="#" class="nav-link text-white" onclick="loadExams()"><i class="bi bi-journal-bookmark"></i> Exams & Results</a>
+    <a href="#" class="nav-link text-white" onclick="loadExams()"><i class="bi bi-journal-bookmark"></i> Exams</a>
+    <a href="#" class="nav-link text-white" onclick="loadResults()"><i class="bi bi-file-earmark-ruled"></i> Results</a>
     <a href="#" class="nav-link text-white" onclick="loadTestResults()"><i class="bi bi-clipboard-check"></i> Test Results</a>
     
     <hr class="text-white-50 my-2"><small class="text-white-50 px-2">REPORTS</small>
