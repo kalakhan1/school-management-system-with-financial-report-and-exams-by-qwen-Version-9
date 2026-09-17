@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>School ERP System</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+  
+  <!-- ✅ CSS Files (Order matters: base → dark theme) -->
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/dark-theme.css">
+  
+  <style>
+    #loginScreen, #appLayout { display: none; }
+    #loginScreen.active { display: block !important; }
+    #appLayout.active { display: flex !important; }
+    
+    /* Prevent flash of unstyled content */
+    body {
+      visibility: hidden;
+    }
+    body.loaded {
+      visibility: visible;
+    }
+  </style>
+  
+  <!-- ✅ Theme Manager (Load early to prevent flash) -->
+  <script src="/js/themeManager.js"></script>
+</head>
+<body class="bg-light" onload="document.body.classList.add('loaded')">
+
+  <!-- Login Screen -->
+  <div id="loginScreen" class="container mt-5" style="max-width: 400px;">
+    <div class="card shadow">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h3 class="mb-0">School ERP</h3>
+          <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Theme">
+            <i class="bi bi-moon-fill"></i>
+            <span class="theme-text">Dark</span>
+          </button>
+        </div>
+        <form id="loginForm">
+          <div class="mb-3">
+            <label class="form-label">Username</label>
+            <input type="text" id="loginUsername" class="form-control" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Password</label>
+            <input type="password" id="loginPassword" class="form-control" required>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Login</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main App Layout -->
+  <div id="appLayout" class="d-flex">
+    <nav id="sidebar" class="bg-dark text-white p-3" style="width: 250px; min-height: 100vh;"></nav>
+    <main class="flex-grow-1 p-4">
+      <div class="d-flex justify-content-between mb-4">
+        <h2 id="pageTitle">Dashboard</h2>
+        <div class="d-flex gap-2">
+          <button class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Theme">
+            <i class="bi bi-moon-fill"></i>
+            <span class="theme-text">Dark</span>
+          </button>
+          <button class="btn btn-outline-danger btn-sm" onclick="logout()">
+            <i class="bi bi-box-arrow-right"></i> Logout
+          </button>
+        </div>
+      </div>
+      <div id="mainContent"></div>
+    </main>
+  </div>
+
+  <!-- Global Containers -->
+  <div id="toastContainer" class="position-fixed top-0 end-0 p-3" style="z-index: 1055;"></div>
+  <div id="modalContainer"></div>
+  <div id="printArea" class="d-none"></div>
+
+  <!-- Core Scripts -->
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/dashboard.js"></script>
+  
+  <!-- Module Scripts -->
+  <script src="/js/users.js"></script>
+  <script src="/js/academic.js"></script>
+  <script src="/js/finance.js"></script>
+  <script src="/js/salary.js"></script>
+  <script src="/js/examination.js"></script>
+  <script src="/js/attendance.js"></script>
+  
+  <!-- Report Scripts -->
+  <script src="/js/classResultReport.js"></script>
+  
+  <!-- Utility Scripts -->
+  <script src="/js/backupRestore.js"></script>
+  <script src="/js/archive.js"></script>
+  <script src="/js/settings.js"></script>
+  <script src="/js/audit.js"></script>
+  <script src="/js/dataManager.js"></script>
+  <script src="/js/financialReports.js"></script>
+  <script src="/js/feeReminders.js"></script>
+  <script src="/js/idCards.js"></script>
+  <script src="/js/databaseTools.js"></script>
+</body>
+</html>
